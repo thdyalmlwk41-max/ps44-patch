@@ -35,81 +35,57 @@ jobs:
       - name: Auto-Fix Source Codes & Direct Build SPRX
         working-directory: .github/workflows/ps44
         run: |
-          echo "==> Auto-fixing C source code conflicts and undeclared variables..."
+          echo "==> Auto-fixing C source code conflicts and headers..."
           
           python3 -c '
           import os, re, glob
 
-          # 1. إصلاح الهيدرات وتوحيد المتغير extern bool g_settings_applied
-          for h_path in glob.glob("include/*.h") + glob.glob("src/*.h"):
-              if os.path.exists(h_path):
-                  with open(h_path, "r", encoding="utf-8", errors="ignore") as f:
-                      h_code = f.read()
-                  
-                  # تنظيف أي إعلانات قديمة غير صحيحة
-                  h_code = re.sub(r"extern\s+int\s+g_settings_applied\s*;", "", h_code)
-                  h_code = re.sub(r"extern\s+bool\s+g_settings_applied\s*;", "", h_code)
-                  
-                  # إضافة الإعلان الصحيح بالنوع bool
-                  h_code = "#include <stdbool.h>\nextern bool g_settings_applied;\n" + h_code
-                  with open(h_path, "w", encoding="utf-8") as f:
-                      f.write(h_code)
-
-          # 2. تعديل main.c لتحويل static bool إلى bool عامة
+          # 1. إصلاح main.c
           if os.path.exists("src/main.c"):
               with open("src/main.c", "r", encoding="utf-8", errors="ignore") as f:
-                  main_code = f.read()
-              
-              main_code = re.sub(r"#define\s+va_start\b.*", "// disabled manual va_start", main_code)
-              main_code = re.sub(r"#define\s+va_end\b.*", "// disabled manual va_end", main_code)
-              
-              # تحويل static bool إلى bool عام
-              main_code = re.sub(r"static\s+bool\s+g_settings_applied", "bool g_settings_applied", main_code)
-              main_code = re.sub(r"static\s+int\s+g_settings_applied", "bool g_settings_applied", main_code)
-              
-              if "<stdbool.h>" not in main_code:
-                  main_code = "#include <stdbool.h>\n" + main_code
-              if "<stdarg.h>" not in main_code:
-                  main_code = "#include <stdarg.h>\n" + main_code
-                  
+                  code = f.read()
+              code = re.sub(r"#define\s+va_start\b.*", "// disabled va_start", code)
+              code = re.sub(r"#define\s+va_end\b.*", "// disabled va_end", code)
+              code = re.sub(r"static\s+(bool|int)\s+g_settings_applied", r"bool g_settings_applied", code)
               with open("src/main.c", "w", encoding="utf-8") as f:
-                  f.write(main_code)
+                  f.write("#include <stdbool.h>\n#include <stdarg.h>\n" + code)
               print("-> main.c patched successfully.")
 
-          # 3. إصلاح خطأ original_len في src/hook.c
+          # 2. إصلاح hook.c
           if os.path.exists("src/hook.c"):
               with open("src/hook.c", "r", encoding="utf-8", errors="ignore") as f:
-                  hook_code = f.read()
-              
-              hook_code = re.sub(r"(\b\w+->original_len\s*=.*;)", r"// \1", hook_code)
-              hook_code = re.sub(r"(\b\w+\.original_len\s*=.*;)", r"// \1", hook_code)
-              
+                  code = f.read()
+              code = re.sub(r"(\b\w+->original_len\s*=.*;)", r"// \1", code)
+              code = re.sub(r"(\b\w+\.original_len\s*=.*;)", r"// \1", code)
               with open("src/hook.c", "w", encoding="utf-8") as f:
-                  f.write(hook_code)
-              print("-> src/hook.c patched successfully.")
+                  f.write("#include <stdbool.h>\n" + code)
+              print("-> hook.c patched successfully.")
 
-          # 4. ضبط src/ue4.c لاستخدام extern bool
+          # 3. إصلاح ue4.c بتضمين stdbool.h في السطر الأول ثم extern bool
           if os.path.exists("src/ue4.c"):
               with open("src/ue4.c", "r", encoding="utf-8", errors="ignore") as f:
-                  ue4_code = f.read()
-              
-              ue4_code = re.sub(r"int\s+g_settings_applied\s*=\s*0\s*;", "", ue4_code)
-              
-              if "<stdbool.h>" not in ue4_code:
-                  ue4_code = "#include <stdbool.h>\n" + ue4_code
-              if "extern bool g_settings_applied;" not in ue4_code:
-                  ue4_code = "extern bool g_settings_applied;\n" + ue4_code
-                  
+                  code = f.read()
+              code = re.sub(r"extern\s+(bool|int)\s+g_settings_applied\s*;", "", code)
+              code = re.sub(r"int\s+g_settings_applied\s*=\s*0\s*;", "", code)
               with open("src/ue4.c", "w", encoding="utf-8") as f:
-                  f.write(ue4_code)
-              print("-> src/ue4.c patched successfully.")
+                  f.write("#include <stdbool.h>\nextern bool g_settings_applied;\n" + code)
+              print("-> ue4.c patched successfully.")
+
+          # 4. إصلاح جميع الهيدرات
+          for h in glob.glob("include/*.h") + glob.glob("src/*.h"):
+              with open(h, "r", encoding="utf-8", errors="ignore") as f:
+                  code = f.read()
+              code = re.sub(r"extern\s+(bool|int)\s+g_settings_applied\s*;", "", code)
+              with open(h, "w", encoding="utf-8") as f:
+                  f.write("#include <stdbool.h>\nextern bool g_settings_applied;\n" + code)
+              print(f"-> Header patched: {h}")
           '
 
           # ضبط مسارات OpenOrbis
           export ORBISDEV="${ORBISDEV:-/usr/local/orbisdev}"
           export PATH="$ORBISDEV/bin:/opt/orbisdev/toolchain/bin:$PATH"
 
-          # اختيارات المترجم
+          # تحديد المترجم
           if command -v orbis-clang >/dev/null 2>&1; then
             CC="orbis-clang"
           elif [ -x "$ORBISDEV/bin/clang" ]; then
@@ -118,8 +94,8 @@ jobs:
             CC="clang -target x86_64-scei-ps4 -isystem $ORBISDEV/usr/include"
           fi
 
-          # خيارات التجميع وتجاهل تحذيرات Clang
-          CFLAGS="-Iinclude -O2 -fPIC -Wno-everything"
+          # إجبار التضمين للمكتبات العامة للتعرف على bool و va_list مجاناً وتجاهل التحذيرات
+          CFLAGS="-Iinclude -O2 -fPIC -include stdbool.h -include stdarg.h -Wno-everything"
 
           echo "Using Compiler: $CC"
           echo "==> Compiling source files..."
