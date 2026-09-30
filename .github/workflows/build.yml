@@ -26,7 +26,7 @@ jobs:
             build-base \
             bash
 
-          # إصلاح التوافقية لمكتبات Clang في Alpine Linux
+          # إصلاح التوافقية لمكتبات Clang و Alpine Linux
           mkdir -p /lib64 && [ ! -f /lib64/ld-linux-x86-64.so.2 ] && ln -sf /lib/ld-musl-x86_64.so.1 /lib64/ld-linux-x86-64.so.2 || true
           [ -f /usr/lib/libncursesw.so.6 ] && ln -sf /usr/lib/libncursesw.so.6 /usr/lib/libncurses.so.6 || true
           [ -f /usr/lib/libtinfo.so.6 ] && ln -sf /usr/lib/libtinfo.so.6 /usr/lib/libtinfo.so || true
@@ -34,26 +34,34 @@ jobs:
       - name: Direct Build SPRX
         working-directory: .github/workflows/ps44
         run: |
-          # تحديد مسار OpenOrbis
+          # 1. إصلاح نقص stdarg.h في الكود تلقائياً
+          echo "==> Patching missing <stdarg.h> headers in source files..."
+          grep -q "stdarg.h" src/main.c || sed -i '1s/^/#include <stdarg.h>\n/' src/main.c
+          grep -q "stdarg.h" include/*.h 2>/dev/null || sed -i '1s/^/#include <stdarg.h>\n/' include/*.h 2>/dev/null || true
+
+          # 2. ضبط البيئة والمسارات
           export ORBISDEV="${ORBISDEV:-/usr/local/orbisdev}"
           export PATH="$ORBISDEV/bin:/opt/orbisdev/toolchain/bin:$PATH"
 
-          echo "==> Searching for OpenOrbis Compiler..."
+          # 3. تحديد المترجم والخيارات
           if command -v orbis-clang >/dev/null 2>&1; then
             CC="orbis-clang"
           elif [ -x "$ORBISDEV/bin/clang" ]; then
-            CC="$ORBISDEV/bin/clang -target x86_64-scei-ps4 -isystem $ORBISDEV/usr/include"
+            CC="$ORBISDEV/bin/clang -target x86_64-scei-ps4 -isystem $ORBISDEV/usr/include -isystem /usr/include"
           else
-            CC="clang -target x86_64-scei-ps4 -isystem $ORBISDEV/usr/include"
+            CC="clang -target x86_64-scei-ps4 -isystem $ORBISDEV/usr/include -isystem /usr/include"
           fi
 
-          echo "Using Compiler: $CC"
+          # خيارات التجميع مع إجبار تضمين stdarg.h وتجاهل تحذيرات الإعلان المباشر
+          CFLAGS="-Iinclude -O2 -fPIC -include stdarg.h -Wno-implicit-function-declaration -Wno-int-conversion"
 
+          echo "Using Compiler: $CC"
           echo "==> Compiling C files..."
-          $CC -Iinclude -O2 -fPIC -c src/main.c -o main.o
-          $CC -Iinclude -O2 -fPIC -c src/hook.c -o hook.o
-          $CC -Iinclude -O2 -fPIC -c src/pattern.c -o pattern.o
-          $CC -Iinclude -O2 -fPIC -c src/ue4.c -o ue4.o
+
+          $CC $CFLAGS -c src/main.c -o main.o
+          $CC $CFLAGS -c src/hook.c -o hook.o
+          $CC $CFLAGS -c src/pattern.c -o pattern.o
+          $CC $CFLAGS -c src/ue4.c -o ue4.o
 
           echo "==> Linking object files to ELF..."
           if command -v orbis-ld >/dev/null 2>&1; then
