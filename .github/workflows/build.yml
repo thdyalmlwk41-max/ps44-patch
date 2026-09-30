@@ -16,7 +16,7 @@ jobs:
 
       - name: Install Build Tools
         run: |
-          apt-get update && apt-get install -y make build-essential
+          apk update && apk add --no-wiki make build-base || apk add make build-base
 
       - name: Compile SPRX
         run: |
