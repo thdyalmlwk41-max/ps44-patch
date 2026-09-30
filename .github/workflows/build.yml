@@ -1,4 +1,4 @@
-name: Build PS4 SPRX Patch
+name: Build PS4 Days Gone 900p SPRX
 
 on:
   push:
@@ -6,48 +6,68 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-sprx:
     runs-on: ubuntu-latest
     container:
       image: orbisdev/orbisdev:latest
+
+    env:
+      ORBISDEV: /usr/local/orbisdev
+      PATH: /usr/local/orbisdev/bin:/opt/orbisdev/toolchain/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install Tools
+      - name: Install System Dependencies & Fix Clang Ncurses
         run: |
-          apk update && apk add make cmake build-base gcc clang || true
+          apk update
+          apk add --no-cache \
+            ncurses-libs \
+            ncurses-terminfo \
+            ncurses-terminfo-base \
+            gcompat \
+            build-base \
+            cmake \
+            make \
+            bash
+
+          # إنشاء روابط رمزية للمكتبات في حال اختلاف المسميات داخل Alpine
+          [ -f /usr/lib/libncursesw.so.6 ] && [ ! -f /usr/lib/libncurses.so.6 ] && ln -s /usr/lib/libncursesw.so.6 /usr/lib/libncurses.so.6 || true
+          [ -f /usr/lib/libtinfo.so.6 ] && [ ! -f /usr/lib/libtinfo.so ] && ln -s /usr/lib/libtinfo.so.6 /usr/lib/libtinfo.so || true
 
       - name: Direct Build SPRX
+        working-directory: .github/workflows/ps44
         run: |
-          # 1. إعداد بيئة OpenOrbis
-          export OO_PS4_TOOLCHAIN=/opt/orbisdev/toolchain
-          export ORBISDEV=/opt/orbisdev
-          export PATH=$OO_PS4_TOOLCHAIN/bin:$ORBISDEV/bin:$PATH
+          echo "==> Current Working Directory: $(pwd)"
           
-          # 2. الانتقال إلى مجلد الكود
-          cd .github/workflows/ps44
-          
-          echo "Compiling Days Gone 900p Patch directly..."
-          
-          # 3. التجميع المباشر عبر orbis-clang وتوليد الملف النهائي
-          orbis-clang -shared -s \
-            -Iinclude \
-            -I$OO_PS4_TOOLCHAIN/include \
-            src/main.c src/hook.c src/pattern.c src/ue4.c \
-            -o days_gone_900p.sprx \
-            -L$OO_PS4_TOOLCHAIN/lib || \
-          clang -shared -fPIC \
-            -Iinclude \
-            src/*.c \
-            -o days_gone_900p.sprx
+          # التأكد من وجود أدوات Orbis
+          export PATH="$ORBISDEV/bin:/opt/orbisdev/toolchain/bin:$PATH"
 
-          ls -la days_gone_900p.sprx
+          echo "==> Compiling source files..."
+          
+          # تجميع ملفات المصدر C إلى ملفات كائنية .o
+          orbis-clang -Iinclude -O2 -c src/main.c -o main.o
+          orbis-clang -Iinclude -O2 -c src/hook.c -o hook.o
+          orbis-clang -Iinclude -O2 -c src/pattern.c -o pattern.o
+          orbis-clang -Iinclude -O2 -c src/ue4.c -o ue4.o
 
-      - name: Upload .sprx Artifact
+          echo "==> Linking to ELF..."
+          orbis-ld -o days_gone_900p.elf main.o hook.o pattern.o ue4.o -L$ORBISDEV/usr/lib -lc -lkernel
+
+          echo "==> Converting ELF to SPRX..."
+          if command -v orbis-elf2sprx >/dev/null 2>&1; then
+            orbis-elf2sprx days_gone_900p.elf days_gone_900p.sprx
+          else
+            orbis-clang -shared main.o hook.o pattern.o ue4.o -o days_gone_900p.sprx
+          fi
+
+          echo "==> Build Completed Successfully!"
+          ls -la *.sprx
+
+      - name: Upload SPRX Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DaysGone-900p-Patch
-          path: |
-            .github/workflows/ps44/*.sprx
-            **/*.sprx
+          name: Days_Gone_900p_Patch
+          path: .github/workflows/ps44/*.sprx
+          if-no-files-found: error
