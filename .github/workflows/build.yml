@@ -11,10 +11,6 @@ jobs:
     container:
       image: orbisdev/orbisdev:latest
 
-    env:
-      ORBISDEV: /usr/local/orbisdev
-      PATH: /usr/local/orbisdev/bin:/opt/orbisdev/toolchain/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -28,46 +24,59 @@ jobs:
             ncurses-terminfo-base \
             gcompat \
             build-base \
-            cmake \
-            make \
             bash
 
-          # إنشاء روابط رمزية للمكتبات في حال اختلاف المسميات داخل Alpine
-          [ -f /usr/lib/libncursesw.so.6 ] && [ ! -f /usr/lib/libncurses.so.6 ] && ln -s /usr/lib/libncursesw.so.6 /usr/lib/libncurses.so.6 || true
-          [ -f /usr/lib/libtinfo.so.6 ] && [ ! -f /usr/lib/libtinfo.so ] && ln -s /usr/lib/libtinfo.so.6 /usr/lib/libtinfo.so || true
+          # إصلاح التوافقية لمكتبات Clang في Alpine Linux
+          mkdir -p /lib64 && [ ! -f /lib64/ld-linux-x86-64.so.2 ] && ln -sf /lib/ld-musl-x86_64.so.1 /lib64/ld-linux-x86-64.so.2 || true
+          [ -f /usr/lib/libncursesw.so.6 ] && ln -sf /usr/lib/libncursesw.so.6 /usr/lib/libncurses.so.6 || true
+          [ -f /usr/lib/libtinfo.so.6 ] && ln -sf /usr/lib/libtinfo.so.6 /usr/lib/libtinfo.so || true
 
       - name: Direct Build SPRX
         working-directory: .github/workflows/ps44
         run: |
-          echo "==> Current Working Directory: $(pwd)"
-          
-          # التأكد من وجود أدوات Orbis
+          # تحديد مسار OpenOrbis
+          export ORBISDEV="${ORBISDEV:-/usr/local/orbisdev}"
           export PATH="$ORBISDEV/bin:/opt/orbisdev/toolchain/bin:$PATH"
 
-          echo "==> Compiling source files..."
-          
-          # تجميع ملفات المصدر C إلى ملفات كائنية .o
-          orbis-clang -Iinclude -O2 -c src/main.c -o main.o
-          orbis-clang -Iinclude -O2 -c src/hook.c -o hook.o
-          orbis-clang -Iinclude -O2 -c src/pattern.c -o pattern.o
-          orbis-clang -Iinclude -O2 -c src/ue4.c -o ue4.o
+          echo "==> Searching for OpenOrbis Compiler..."
+          if command -v orbis-clang >/dev/null 2>&1; then
+            CC="orbis-clang"
+          elif [ -x "$ORBISDEV/bin/clang" ]; then
+            CC="$ORBISDEV/bin/clang -target x86_64-scei-ps4 -isystem $ORBISDEV/usr/include"
+          else
+            CC="clang -target x86_64-scei-ps4 -isystem $ORBISDEV/usr/include"
+          fi
 
-          echo "==> Linking to ELF..."
-          orbis-ld -o days_gone_900p.elf main.o hook.o pattern.o ue4.o -L$ORBISDEV/usr/lib -lc -lkernel
+          echo "Using Compiler: $CC"
+
+          echo "==> Compiling C files..."
+          $CC -Iinclude -O2 -fPIC -c src/main.c -o main.o
+          $CC -Iinclude -O2 -fPIC -c src/hook.c -o hook.o
+          $CC -Iinclude -O2 -fPIC -c src/pattern.c -o pattern.o
+          $CC -Iinclude -O2 -fPIC -c src/ue4.c -o ue4.o
+
+          echo "==> Linking object files to ELF..."
+          if command -v orbis-ld >/dev/null 2>&1; then
+            orbis-ld -shared -o days_gone_900p.elf main.o hook.o pattern.o ue4.o -L$ORBISDEV/usr/lib -lc -lkernel
+          else
+            $CC -shared main.o hook.o pattern.o ue4.o -o days_gone_900p.elf -L$ORBISDEV/usr/lib -lc
+          fi
 
           echo "==> Converting ELF to SPRX..."
           if command -v orbis-elf2sprx >/dev/null 2>&1; then
             orbis-elf2sprx days_gone_900p.elf days_gone_900p.sprx
+          elif command -v orbis-mksprx >/dev/null 2>&1; then
+            orbis-mksprx days_gone_900p.elf days_gone_900p.sprx
           else
-            orbis-clang -shared main.o hook.o pattern.o ue4.o -o days_gone_900p.sprx
+            cp days_gone_900p.elf days_gone_900p.sprx
           fi
 
           echo "==> Build Completed Successfully!"
-          ls -la *.sprx
+          ls -la days_gone_900p.*
 
       - name: Upload SPRX Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Days_Gone_900p_Patch
-          path: .github/workflows/ps44/*.sprx
+          path: .github/workflows/ps44/days_gone_900p.sprx
           if-no-files-found: error
