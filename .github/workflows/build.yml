@@ -23,12 +23,12 @@ jobs:
           export OO_PS4_TOOLCHAIN=/opt/orbisdev/toolchain
           export PATH=$OO_PS4_TOOLCHAIN/bin:$PATH
           
-          # الانتقال إلى موقع مجلد المشروع الحقيقي داخل .github/workflows/ps44
+          # الانتقال إلى المجلد المستهدف
           cd .github/workflows/ps44
           
-          # إنشاء مجلد البناء وتجميع المشروع عبر CMake
+          # التجميع باستخدام OpenOrbis Toolchain المدمجة
           mkdir -p build && cd build
-          cmake ..
+          cmake -DCMAKE_TOOLCHAIN_FILE=/opt/orbisdev/toolchain/link/orbis-toolchain.cmake ..
           make
 
       - name: Upload .sprx Artifact
