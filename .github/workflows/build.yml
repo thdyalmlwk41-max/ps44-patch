@@ -14,7 +14,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 1. حل مشكلة فقدان الأدوات وتعدد التوزيعات (Alpine/Debian)
+      # 1. حل مشكلة الأدوات وتعدد التوزيعات (Alpine/Debian)
       - name: Install All Required Build Tools
         run: |
           if command -v apk >/dev/null 2>&1; then
@@ -23,7 +23,7 @@ jobs:
             apt-get update && apt-get install -y make cmake build-essential clang llvm ninja-build || true
           fi
 
-      # 2. حل مشكلة مسارات العمل، المترجم المكسور، وغياب المصادر عن target
+      # 2. البناء التراكمي: معالجة مسارات العمل، المترجم المكسور، وتمرير الملفات المصدرية المباشرة
       - name: Compile SPRX (Auto-Detect Build System & Path)
         run: |
           # إعداد متغيرات البيئة الرسمية لـ OpenOrbis
@@ -34,7 +34,7 @@ jobs:
           # الدخول التلقائي لمجلد المشروع المكتشف
           if [ -d ".github/workflows/ps44" ]; then
             cd .github/workflows/ps44
-          elif [ -d "ps44" ]; then
+          elif [ -d "ps44" ]; me
             cd ps44
           else
             TARGET_DIR=$(dirname $(find . -maxdepth 3 -iname "CMakeLists.txt" -o -iname "Makefile" | head -n 1) 2>/dev/null || echo ".")
@@ -46,22 +46,27 @@ jobs:
           echo "Working in directory: $(pwd)"
           ls -la
 
-          # البناء عبر CMake مع إصلاح مشكلة No SOURCES والمترجم المكسور
+          # البناء عبر CMake
           if [ -f "CMakeLists.txt" ]; then
             echo "Building with CMake..."
+            
+            # تحديد كافة الملفات المصدرية المتاحة داخل مجلد src
+            SRC_FILES=$(find src -name "*.c" -o -name "*.cpp" 2>/dev/null | tr '\n' ' ')
             
             # البحث عن ملف Toolchain الخص بـ OpenOrbis
             TC_FILE=$(find /opt/orbisdev /usr/local/orbisdev -iname "*toolchain*.cmake" 2>/dev/null | head -n 1)
             
-            # خيارات التجاوز والتوافق لعدم توقف المترجم Cross-Compiler ولربط الملفات المصدرية
+            # خيارات التجاوز والتوافق لعدم توقف المترجم Cross-Compiler
             CROSS_OPTS="-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY -DCMAKE_C_COMPILER_WORKS=TRUE -DCMAKE_CXX_COMPILER_WORKS=TRUE"
 
-            # محاولة البناء المباشر في نفس المجلد لتفادي خطأ تفريغ SOURCES
+            # إنشاء مجلد البناء وتمرير المسار بشكل صريح
+            mkdir -p build && cd build
+
             if [ -n "$TC_FILE" ]; then
-              cmake -DCMAKE_TOOLCHAIN_FILE="$TC_FILE" $CROSS_OPTS -DCMAKE_MAKE_PROGRAM=make . || \
-              cmake $CROSS_OPTS -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ .
+              cmake -DCMAKE_TOOLCHAIN_FILE="$TC_FILE" $CROSS_OPTS -DCMAKE_MAKE_PROGRAM=make -DSOURCES="$SRC_FILES" .. || \
+              cmake $CROSS_OPTS -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DSOURCES="$SRC_FILES" ..
             else
-              cmake $CROSS_OPTS -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ .
+              cmake $CROSS_OPTS -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DSOURCES="$SRC_FILES" ..
             fi
             
             make clean || true
