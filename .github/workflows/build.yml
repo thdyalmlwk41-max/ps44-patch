@@ -35,7 +35,7 @@ jobs:
       - name: Auto-Fix Source Codes & Direct Build SPRX
         working-directory: .github/workflows/ps44
         run: |
-          echo "==> Auto-fixing C source code conflicts..."
+          echo "==> Auto-fixing C source code conflicts and undeclared variables..."
           
           python3 -c '
           import os, re, glob
@@ -55,12 +55,11 @@ jobs:
                   f.write(main_code)
               print("-> main.c patched successfully.")
 
-          # 2. إصلاح خطأ original_len في src/hook.c بتعطيل السطر المسبب للخطأ
+          # 2. إصلاح خطأ original_len في src/hook.c
           if os.path.exists("src/hook.c"):
               with open("src/hook.c", "r", encoding="utf-8", errors="ignore") as f:
                   hook_code = f.read()
               
-              # التعليق على أي إسناد لـ original_len لتجنب خطأ التجميع
               hook_code = re.sub(r"(\b\w+->original_len\s*=.*;)", r"// \1", hook_code)
               hook_code = re.sub(r"(\b\w+\.original_len\s*=.*;)", r"// \1", hook_code)
               
@@ -68,19 +67,28 @@ jobs:
                   f.write(hook_code)
               print("-> src/hook.c original_len patched successfully.")
 
-          # 3. إضافة original_len داخل أي هيكل hook_t محلي في الهيدرات تحسباً للاستخدام
-          for root, dirs, files in os.walk("."):
-              for file in files:
-                  if file.endswith(".h") or file.endswith(".c"):
-                      path = os.path.join(root, file)
-                      with open(path, "r", encoding="utf-8", errors="ignore") as f:
-                          content = f.read()
-                      if ("hook_t" in content or "struct hook" in content) and "original_len" not in content:
-                          content = re.sub(r"(struct\s+\w*hook\w*\s*\{)", r"\1\n    unsigned long original_len;", content)
-                          content = re.sub(r"(typedef\s+struct\s*\{)", r"\1\n    unsigned long original_len;", content)
-                          with open(path, "w", encoding="utf-8") as f:
-                              f.write(content)
-                          print(f"-> Header patched: {path}")
+          # 3. إصلاح المتغير الغير معرف g_settings_applied في src/ue4.c الهيدرات
+          if os.path.exists("src/ue4.c"):
+              with open("src/ue4.c", "r", encoding="utf-8", errors="ignore") as f:
+                  ue4_code = f.read()
+              
+              # إضافة إعلان المتغير في بداية ue4.c لمنع خطأ undeclared identifier
+              patch_header = "#include <stdbool.h>\n#include <stdint.h>\nint g_settings_applied = 0;\n"
+              if "g_settings_applied" in ue4_code and "int g_settings_applied" not in ue4_code and "extern" not in ue4_code:
+                  ue4_code = patch_header + ue4_code
+                  with open("src/ue4.c", "w", encoding="utf-8") as f:
+                      f.write(ue4_code)
+                  print("-> src/ue4.c g_settings_applied patched successfully.")
+
+          # 4. إدراج g_settings_applied كـ extern في include/days_gone_900p.h تحسباً
+          for h_path in glob.glob("include/*.h") + glob.glob("src/*.h"):
+              with open(h_path, "r", encoding="utf-8", errors="ignore") as f:
+                  h_code = f.read()
+              if "g_settings_applied" not in h_code:
+                  h_code = "#include <stdbool.h>\nextern int g_settings_applied;\n" + h_code
+                  with open(h_path, "w", encoding="utf-8") as f:
+                      f.write(h_code)
+                  print(f"-> Header patched: {h_path}")
           '
 
           # ضبط مسارات OpenOrbis
@@ -96,7 +104,7 @@ jobs:
             CC="clang -target x86_64-scei-ps4 -isystem $ORBISDEV/usr/include"
           fi
 
-          # خيارات التجميع وتجاهل التحذيرات غير الهامة
+          # خيارات التجميع وتجاهل التحذيرات
           CFLAGS="-Iinclude -O2 -fPIC -Wno-everything"
 
           echo "Using Compiler: $CC"
