@@ -23,8 +23,12 @@ jobs:
           export OO_PS4_TOOLCHAIN=/opt/orbisdev/toolchain
           export PATH=$OO_PS4_TOOLCHAIN/bin:$PATH
           
-          # الدخول لمجلد المشروع إذا كان الملف بداخله
-          if [ -d "ps44" ]; then cd ps44; fi
+          # البحث المباشر عن مجلد Makefile والدخول إليه
+          MAKE_DIR=$(find . -maxdepth 3 -name "Makefile" -o -name "makefile" | head -n 1 | xargs dirname)
+          if [ -n "$MAKE_DIR" ]; then
+            echo "Found Makefile in: $MAKE_DIR"
+            cd "$MAKE_DIR"
+          fi
           
           make clean || true
           make
