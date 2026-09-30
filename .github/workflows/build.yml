@@ -14,7 +14,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 1. حل مشكلة الأدوات وتعدد التوزيعات (Alpine/Debian)
+      # 1. تثبيت أدوات البناء لكافة التوزيعات (Alpine/Debian)
       - name: Install All Required Build Tools
         run: |
           if command -v apk >/dev/null 2>&1; then
@@ -23,7 +23,7 @@ jobs:
             apt-get update && apt-get install -y make cmake build-essential clang llvm ninja-build sed || true
           fi
 
-      # 2. البناء التراكمي: معالجة مسارات العمل، المترجم المكسور، وإصلاح SOURCES لـ CMake
+      # 2. خطوة البناء التراكمية مع المعالجة الشاملة لـ CMake و SOURCES
       - name: Compile SPRX (Auto-Detect Build System & Path)
         run: |
           # إعداد متغيرات البيئة الرسمية لـ OpenOrbis
@@ -50,13 +50,14 @@ jobs:
           if [ -f "CMakeLists.txt" ]; then
             echo "Building with CMake..."
             
-            # حظر وتجنب خطأ تفريغ المصادر بضمان تسجيل ملفات src
-            SRC_LIST=$(find src -type f \( -name "*.c" -o -name "*.cpp" \) 2>/dev/null | tr '\n' ' ')
-            if [ -n "$SRC_LIST" ]; then
-              echo "Found source files: $SRC_LIST"
-              # إضافة تعيين صريح لـ SOURCES في حال عدم التعرف عليها داخل CMakeLists.txt
-              sed -i '/add_library/i file(GLOB_RECURSE SRC_FILES "src/*.c" "src/*.cpp")' CMakeLists.txt || true
-              sed -i 's/add_library(days_gone_900p SHARED/add_library(days_gone_900p SHARED ${SRC_FILES}/g' CMakeLists.txt || true
+            # حصر ملفات الكود المصدرية
+            SRC_FILES=$(find src -type f \( -name "*.c" -o -name "*.cpp" \) 2>/dev/null | tr '\n' ' ')
+            echo "Detected sources: $SRC_FILES"
+
+            # التعديل المباشر على CMakeLists.txt لتمرير المصادر المكتشفة وتجنب خطأ No SOURCES
+            if [ -n "$SRC_FILES" ]; then
+              # إزالة أي تعيين فارغ سابق وحقن قائمة الملفات المكتشفة
+              sed -i 's/add_library(days_gone_900p SHARED/file(GLOB_RECURSE SRC_LIST "src\/*.c" "src\/*.cpp")\nadd_library(days_gone_900p SHARED ${SRC_LIST} '$SRC_FILES'/g' CMakeLists.txt || true
             fi
             
             # البحث عن ملف Toolchain الخاص بـ OpenOrbis
@@ -65,14 +66,12 @@ jobs:
             # خيارات التجاوز والتوافق لعدم توقف المترجم Cross-Compiler
             CROSS_OPTS="-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY -DCMAKE_C_COMPILER_WORKS=TRUE -DCMAKE_CXX_COMPILER_WORKS=TRUE"
 
-            # إنشاء مجلد البناء والبدء
-            mkdir -p build && cd build
-
+            # التشغيل المباشر من المجلد الحالي لمنع فقدان المسارات
             if [ -n "$TC_FILE" ]; then
-              cmake -DCMAKE_TOOLCHAIN_FILE="$TC_FILE" $CROSS_OPTS -DCMAKE_MAKE_PROGRAM=make .. || \
-              cmake $CROSS_OPTS -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ ..
+              cmake -DCMAKE_TOOLCHAIN_FILE="$TC_FILE" $CROSS_OPTS -DCMAKE_MAKE_PROGRAM=make . || \
+              cmake $CROSS_OPTS -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ .
             else
-              cmake $CROSS_OPTS -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ ..
+              cmake $CROSS_OPTS -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ .
             fi
             
             make clean || true
