@@ -31,10 +31,10 @@ jobs:
           export ORBISDEV=/opt/orbisdev
           export PATH=$OO_PS4_TOOLCHAIN/bin:$ORBISDEV/bin:$PATH
           
-          # الدخول التلقائي لمجلد المشروع المكتشف
+          # الدخول التلقائي لمجلد المشروع المكتشف (تم تصحيح syntax error هنا)
           if [ -d ".github/workflows/ps44" ]; then
             cd .github/workflows/ps44
-          elif [ -d "ps44" ]; me
+          elif [ -d "ps44" ]; then
             cd ps44
           else
             TARGET_DIR=$(dirname $(find . -maxdepth 3 -iname "CMakeLists.txt" -o -iname "Makefile" | head -n 1) 2>/dev/null || echo ".")
@@ -53,7 +53,7 @@ jobs:
             # تحديد كافة الملفات المصدرية المتاحة داخل مجلد src
             SRC_FILES=$(find src -name "*.c" -o -name "*.cpp" 2>/dev/null | tr '\n' ' ')
             
-            # البحث عن ملف Toolchain الخص بـ OpenOrbis
+            # البحث عن ملف Toolchain الخاص بـ OpenOrbis
             TC_FILE=$(find /opt/orbisdev /usr/local/orbisdev -iname "*toolchain*.cmake" 2>/dev/null | head -n 1)
             
             # خيارات التجاوز والتوافق لعدم توقف المترجم Cross-Compiler
