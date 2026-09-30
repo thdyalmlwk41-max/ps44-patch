@@ -14,6 +14,10 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Install Build Tools
+        run: |
+          apt-get update && apt-get install -y make build-essential
+
       - name: Compile SPRX
         run: |
           export OO_PS4_TOOLCHAIN=/opt/orbisdev/toolchain
@@ -28,3 +32,4 @@ jobs:
           path: |
             *.sprx
             bin/*.sprx
+            build/*.sprx
