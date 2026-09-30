@@ -18,12 +18,12 @@ jobs:
       - name: Install All Required Build Tools
         run: |
           if command -v apk >/dev/null 2>&1; then
-            apk update && apk add make cmake build-base gcc g++ clang llvm ninja || true
+            apk update && apk add make cmake build-base gcc g++ clang llvm ninja sed || true
           elif command -v apt-get >/dev/null 2>&1; then
-            apt-get update && apt-get install -y make cmake build-essential clang llvm ninja-build || true
+            apt-get update && apt-get install -y make cmake build-essential clang llvm ninja-build sed || true
           fi
 
-      # 2. البناء التراكمي: معالجة مسارات العمل، المترجم المكسور، وحل مشكلة No SOURCES لـ CMake
+      # 2. البناء التراكمي: معالجة مسارات العمل، المترجم المكسور، وإصلاح SOURCES لـ CMake
       - name: Compile SPRX (Auto-Detect Build System & Path)
         run: |
           # إعداد متغيرات البيئة الرسمية لـ OpenOrbis
@@ -50,9 +50,14 @@ jobs:
           if [ -f "CMakeLists.txt" ]; then
             echo "Building with CMake..."
             
-            # حفظ مسار المجلد الحالي وتحديد ملفات السورس المطلقة
-            PROJECT_ROOT=$(pwd)
-            SRC_FILES=$(find "$PROJECT_ROOT" -name "*.c" -o -name "*.cpp" 2>/dev/null | tr '\n' ' ')
+            # حظر وتجنب خطأ تفريغ المصادر بضمان تسجيل ملفات src
+            SRC_LIST=$(find src -type f \( -name "*.c" -o -name "*.cpp" \) 2>/dev/null | tr '\n' ' ')
+            if [ -n "$SRC_LIST" ]; then
+              echo "Found source files: $SRC_LIST"
+              # إضافة تعيين صريح لـ SOURCES في حال عدم التعرف عليها داخل CMakeLists.txt
+              sed -i '/add_library/i file(GLOB_RECURSE SRC_FILES "src/*.c" "src/*.cpp")' CMakeLists.txt || true
+              sed -i 's/add_library(days_gone_900p SHARED/add_library(days_gone_900p SHARED ${SRC_FILES}/g' CMakeLists.txt || true
+            fi
             
             # البحث عن ملف Toolchain الخاص بـ OpenOrbis
             TC_FILE=$(find /opt/orbisdev /usr/local/orbisdev -iname "*toolchain*.cmake" 2>/dev/null | head -n 1)
@@ -60,15 +65,16 @@ jobs:
             # خيارات التجاوز والتوافق لعدم توقف المترجم Cross-Compiler
             CROSS_OPTS="-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY -DCMAKE_C_COMPILER_WORKS=TRUE -DCMAKE_CXX_COMPILER_WORKS=TRUE"
 
-            # التجميع المباشر من نفس المجلد لتفادي خطأ تفريغ المصادر
+            # إنشاء مجلد البناء والبدء
+            mkdir -p build && cd build
+
             if [ -n "$TC_FILE" ]; then
-              cmake -Bbuild -S. -DCMAKE_TOOLCHAIN_FILE="$TC_FILE" $CROSS_OPTS -DCMAKE_MAKE_PROGRAM=make || \
-              cmake -Bbuild -S. $CROSS_OPTS -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+              cmake -DCMAKE_TOOLCHAIN_FILE="$TC_FILE" $CROSS_OPTS -DCMAKE_MAKE_PROGRAM=make .. || \
+              cmake $CROSS_OPTS -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ ..
             else
-              cmake -Bbuild -S. $CROSS_OPTS -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+              cmake $CROSS_OPTS -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ ..
             fi
             
-            cd build
             make clean || true
             make
 
