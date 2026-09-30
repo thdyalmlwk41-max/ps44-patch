@@ -49,14 +49,17 @@ jobs:
             echo "Building with CMake..."
             rm -rf build && mkdir build && cd build
             
-            # البحث عن ملف الـ Toolchain الخص بـ OpenOrbis إذا وجد
-            TC_FILE=$(find /opt/orbisdev -iname "*toolchain*.cmake" 2>/dev/null | head -n 1)
+            # البحث عن ملف الـ Toolchain الخاص بـ OpenOrbis
+            TC_FILE=$(find /opt/orbisdev /usr/local/orbisdev -iname "*toolchain*.cmake" 2>/dev/null | head -n 1)
             
+            # خيارات تجنب فحص المترجم (تجاوز خطأ compiler broken أثناء الـ Cross-Compilation)
+            CROSS_OPTS="-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY -DCMAKE_C_COMPILER_WORKS=TRUE -DCMAKE_CXX_COMPILER_WORKS=TRUE"
+
             if [ -n "$TC_FILE" ]; then
-              cmake -DCMAKE_TOOLCHAIN_FILE="$TC_FILE" -DCMAKE_MAKE_PROGRAM=make .. || \
-              cmake -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY ..
+              cmake -DCMAKE_TOOLCHAIN_FILE="$TC_FILE" $CROSS_OPTS -DCMAKE_MAKE_PROGRAM=make .. || \
+              cmake $CROSS_OPTS -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ ..
             else
-              cmake -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY ..
+              cmake $CROSS_OPTS -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ ..
             fi
             
             make clean || true
