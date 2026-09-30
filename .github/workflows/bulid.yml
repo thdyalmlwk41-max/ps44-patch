@@ -1,0 +1,37 @@
+name: Build PS4 SPRX Patch
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build SPRX using OpenOrbis Toolchain
+        uses: addnab/docker-run-action@v3
+        with:
+          image: orbisdev/orbisdev:latest
+          options: -v ${{ github.workspace }}:/src -w /src
+          run: |
+            export OO_PS4_TOOLCHAIN=/opt/orbisdev/toolchain
+            source /etc/profile.d/orbisdev.sh 2>/dev/null || true
+            if [ -f Makefile ] || [ -f makefile ]; then
+              /opt/orbisdev/toolchain/bin/make clean || true
+              /opt/orbisdev/toolchain/bin/make
+            else
+              build.sh || ./build.sh
+            fi
+
+      - name: Upload .sprx Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DaysGone-900p-Patch
+          path: |
+            *.sprx
+            bin/*.sprx
+            build/*.sprx
