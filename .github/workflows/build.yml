@@ -16,26 +16,19 @@ jobs:
 
       - name: Install Build Tools
         run: |
-          apk update && apk add make build-base || true
+          apk update && apk add make cmake build-base gcc g++ || true
 
-      - name: Compile SPRX
+      - name: Compile SPRX via CMake
         run: |
           export OO_PS4_TOOLCHAIN=/opt/orbisdev/toolchain
           export PATH=$OO_PS4_TOOLCHAIN/bin:$PATH
           
-          # استعراض الملفات للتأكد من المجلد
-          echo "Current directory contents:"
-          ls -la
+          # الانتقال إلى موقع مجلد المشروع الحقيقي داخل .github/workflows/ps44
+          cd .github/workflows/ps44
           
-          # البحث والدخول المباشر إلى أول مجلد يحتوي على Makefile
-          for dir in ./*/; do
-            if [ -f "${dir}Makefile" ] || [ -f "${dir}makefile" ]; then
-              cd "$dir"
-              break
-            fi
-          done
-          
-          make clean || true
+          # إنشاء مجلد البناء وتجميع المشروع عبر CMake
+          mkdir -p build && cd build
+          cmake ..
           make
 
       - name: Upload .sprx Artifact
@@ -43,4 +36,5 @@ jobs:
         with:
           name: DaysGone-900p-Patch
           path: |
+            .github/workflows/ps44/**/*.sprx
             **/*.sprx
