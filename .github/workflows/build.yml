@@ -40,7 +40,22 @@ jobs:
           python3 -c '
           import os, re, glob
 
-          # 1. إصلاح التعارضات بملف main.c
+          # 1. إصلاح الهيدرات وتوحيد المتغير extern bool g_settings_applied
+          for h_path in glob.glob("include/*.h") + glob.glob("src/*.h"):
+              if os.path.exists(h_path):
+                  with open(h_path, "r", encoding="utf-8", errors="ignore") as f:
+                      h_code = f.read()
+                  
+                  # تنظيف أي إعلانات قديمة غير صحيحة
+                  h_code = re.sub(r"extern\s+int\s+g_settings_applied\s*;", "", h_code)
+                  h_code = re.sub(r"extern\s+bool\s+g_settings_applied\s*;", "", h_code)
+                  
+                  # إضافة الإعلان الصحيح بالنوع bool
+                  h_code = "#include <stdbool.h>\nextern bool g_settings_applied;\n" + h_code
+                  with open(h_path, "w", encoding="utf-8") as f:
+                      f.write(h_code)
+
+          # 2. تعديل main.c لتحويل static bool إلى bool عامة
           if os.path.exists("src/main.c"):
               with open("src/main.c", "r", encoding="utf-8", errors="ignore") as f:
                   main_code = f.read()
@@ -48,6 +63,12 @@ jobs:
               main_code = re.sub(r"#define\s+va_start\b.*", "// disabled manual va_start", main_code)
               main_code = re.sub(r"#define\s+va_end\b.*", "// disabled manual va_end", main_code)
               
+              # تحويل static bool إلى bool عام
+              main_code = re.sub(r"static\s+bool\s+g_settings_applied", "bool g_settings_applied", main_code)
+              main_code = re.sub(r"static\s+int\s+g_settings_applied", "bool g_settings_applied", main_code)
+              
+              if "<stdbool.h>" not in main_code:
+                  main_code = "#include <stdbool.h>\n" + main_code
               if "<stdarg.h>" not in main_code:
                   main_code = "#include <stdarg.h>\n" + main_code
                   
@@ -55,7 +76,7 @@ jobs:
                   f.write(main_code)
               print("-> main.c patched successfully.")
 
-          # 2. إصلاح خطأ original_len في src/hook.c
+          # 3. إصلاح خطأ original_len في src/hook.c
           if os.path.exists("src/hook.c"):
               with open("src/hook.c", "r", encoding="utf-8", errors="ignore") as f:
                   hook_code = f.read()
@@ -65,30 +86,23 @@ jobs:
               
               with open("src/hook.c", "w", encoding="utf-8") as f:
                   f.write(hook_code)
-              print("-> src/hook.c original_len patched successfully.")
+              print("-> src/hook.c patched successfully.")
 
-          # 3. إصلاح المتغير الغير معرف g_settings_applied في src/ue4.c الهيدرات
+          # 4. ضبط src/ue4.c لاستخدام extern bool
           if os.path.exists("src/ue4.c"):
               with open("src/ue4.c", "r", encoding="utf-8", errors="ignore") as f:
                   ue4_code = f.read()
               
-              # إضافة إعلان المتغير في بداية ue4.c لمنع خطأ undeclared identifier
-              patch_header = "#include <stdbool.h>\n#include <stdint.h>\nint g_settings_applied = 0;\n"
-              if "g_settings_applied" in ue4_code and "int g_settings_applied" not in ue4_code and "extern" not in ue4_code:
-                  ue4_code = patch_header + ue4_code
-                  with open("src/ue4.c", "w", encoding="utf-8") as f:
-                      f.write(ue4_code)
-                  print("-> src/ue4.c g_settings_applied patched successfully.")
-
-          # 4. إدراج g_settings_applied كـ extern في include/days_gone_900p.h تحسباً
-          for h_path in glob.glob("include/*.h") + glob.glob("src/*.h"):
-              with open(h_path, "r", encoding="utf-8", errors="ignore") as f:
-                  h_code = f.read()
-              if "g_settings_applied" not in h_code:
-                  h_code = "#include <stdbool.h>\nextern int g_settings_applied;\n" + h_code
-                  with open(h_path, "w", encoding="utf-8") as f:
-                      f.write(h_code)
-                  print(f"-> Header patched: {h_path}")
+              ue4_code = re.sub(r"int\s+g_settings_applied\s*=\s*0\s*;", "", ue4_code)
+              
+              if "<stdbool.h>" not in ue4_code:
+                  ue4_code = "#include <stdbool.h>\n" + ue4_code
+              if "extern bool g_settings_applied;" not in ue4_code:
+                  ue4_code = "extern bool g_settings_applied;\n" + ue4_code
+                  
+              with open("src/ue4.c", "w", encoding="utf-8") as f:
+                  f.write(ue4_code)
+              print("-> src/ue4.c patched successfully.")
           '
 
           # ضبط مسارات OpenOrbis
@@ -104,7 +118,7 @@ jobs:
             CC="clang -target x86_64-scei-ps4 -isystem $ORBISDEV/usr/include"
           fi
 
-          # خيارات التجميع وتجاهل التحذيرات
+          # خيارات التجميع وتجاهل تحذيرات Clang
           CFLAGS="-Iinclude -O2 -fPIC -Wno-everything"
 
           echo "Using Compiler: $CC"
