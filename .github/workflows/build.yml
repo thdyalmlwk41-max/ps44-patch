@@ -23,11 +23,10 @@ jobs:
           export OO_PS4_TOOLCHAIN=/opt/orbisdev/toolchain
           export PATH=$OO_PS4_TOOLCHAIN/bin:$PATH
           
-          # البحث المباشر عن مجلد Makefile والدخول إليه
-          MAKE_DIR=$(find . -maxdepth 3 -name "Makefile" -o -name "makefile" | head -n 1 | xargs dirname)
-          if [ -n "$MAKE_DIR" ]; then
-            echo "Found Makefile in: $MAKE_DIR"
-            cd "$MAKE_DIR"
+          # البحث عن أول ملف Makefile والدخول لمجلده مباشرة
+          MAKE_FILE=$(find . -iname "Makefile" | head -n 1)
+          if [ -n "$MAKE_FILE" ]; then
+            cd "$(dirname "$MAKE_FILE")"
           fi
           
           make clean || true
@@ -38,5 +37,4 @@ jobs:
         with:
           name: DaysGone-900p-Patch
           path: |
-            *.sprx
             **/*.sprx
