@@ -1,0 +1,34 @@
+/* Linker script for PS4 SPRX */
+ENTRY(_start)
+
+PHDRS
+{
+    text PT_LOAD FLAGS(5);  /* RX */
+    data PT_LOAD FLAGS(6);  /* RW */
+    note PT_NOTE FLAGS(4);  /* R */
+}
+
+SECTIONS
+{
+    . = 0x0;
+
+    .text : {
+        *(.text*)
+        *(.rodata*)
+    } :text
+
+    .data : {
+        *(.data*)
+        *(.bss*)
+        *(COMMON)
+    } :data
+
+    .note.GNU-stack : {
+        *(.note.GNU-stack)
+    } :note
+
+    /DISCARD/ : {
+        *(.eh_frame*)
+        *(.comment*)
+    }
+}
