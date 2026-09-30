@@ -23,21 +23,14 @@ jobs:
           export OO_PS4_TOOLCHAIN=/opt/orbisdev/toolchain
           export PATH=$OO_PS4_TOOLCHAIN/bin:$PATH
           
-          # الانتقال لمجلد المشروع
+          # الانتقال المباشر إلى مجلد المشروع
           cd .github/workflows/ps44
           
-          # البحث عن ملف toolchain الخص بـ OpenOrbis
-          TC_FILE=$(find /opt/orbisdev -name "orbis-toolchain.cmake" -o -name "OrbisToolchain.cmake" | head -n 1)
+          # إنشاء مجلد البناء وتحديد المسار الرئيسي بالتفصيل
+          rm -rf build && mkdir build && cd build
           
-          mkdir -p build && cd build
-          
-          if [ -n "$TC_FILE" ]; then
-            echo "Using toolchain file: $TC_FILE"
-            cmake -DCMAKE_TOOLCHAIN_FILE="$TC_FILE" ..
-          else
-            cmake ..
-          fi
-          
+          # تشغيل CMake وتمرير المسار الأساسي
+          cmake -DCMAKE_TOOLCHAIN_FILE=$OO_PS4_TOOLCHAIN/link/orbis-toolchain.cmake .. || cmake ..
           make
 
       - name: Upload .sprx Artifact
